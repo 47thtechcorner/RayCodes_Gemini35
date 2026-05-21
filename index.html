@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neon Pong - Player vs AI</title>
+  
+  <!-- Import Orbitron and Inter fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #05050a 0%, #10061e 100%);
+      --neon-cyan: #00f0ff;
+      --neon-magenta: #ff007f;
+      --neon-purple: #9d00ff;
+      --neon-red: #ff3333;
+      --text-glow-cyan: 0 0 10px rgba(0, 240, 255, 0.6), 0 0 20px rgba(0, 240, 255, 0.4);
+      --text-glow-magenta: 0 0 10px rgba(255, 0, 127, 0.6), 0 0 20px rgba(255, 0, 127, 0.4);
+      --box-glow-cyan: 0 0 15px rgba(0, 240, 255, 0.3), inset 0 0 15px rgba(0, 240, 255, 0.15);
+      --box-glow-magenta: 0 0 15px rgba(255, 0, 127, 0.3), inset 0 0 15px rgba(255, 0, 127, 0.15);
+      --glass-bg: rgba(15, 8, 30, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Grid background */
+    body::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(rgba(255, 255, 255, 0.008) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(255, 255, 255, 0.008) 1px, transparent 1px);
+      background-size: 35px 35px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Ambient glow blobs */
+    .blob {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      filter: blur(140px);
+      opacity: 0.12;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .blob-cyan {
+      background: var(--neon-cyan);
+      top: -10%;
+      left: 10%;
+      animation: float 14s infinite alternate ease-in-out;
+    }
+    .blob-magenta {
+      background: var(--neon-magenta);
+      bottom: -10%;
+      right: 10%;
+      animation: float 14s infinite alternate-reverse ease-in-out;
+    }
+
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(40px, 40px) scale(1.15); }
+    }
+
+    /* Cybernetic grid scanlines */
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.03),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.03)
+      );
+      background-size: 100% 4px, 6px 100%;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.45;
+    }
+
+    header {
+      z-index: 10;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.2rem;
+      font-weight: 900;
+      letter-spacing: 5px;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 20px rgba(157, 0, 255, 0.6));
+      animation: title-pulsate 3s infinite alternate ease-in-out;
+    }
+
+    @keyframes title-pulsate {
+      0% { filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.4)) drop-shadow(0 0 15px rgba(255, 0, 127, 0.2)); }
+      100% { filter: drop-shadow(0 0 20px rgba(0, 240, 255, 0.75)) drop-shadow(0 0 35px rgba(255, 0, 127, 0.5)); }
+    }
+
+    .container {
+      z-index: 10;
+      width: 90%;
+      max-width: 840px;
+      position: relative;
+    }
+
+    .card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(157, 0, 255, 0.05);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.4s ease;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Start Menu Panel */
+    .menu-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: rgba(255, 255, 255, 0.6);
+      max-width: 480px;
+      line-height: 1.6;
+      margin-top: -0.8rem;
+    }
+
+    /* Difficulty Selection Panel */
+    .difficulty-section {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .section-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+    }
+
+    .difficulty-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      width: 100%;
+    }
+
+    @media (max-width: 600px) {
+      .difficulty-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* Difficulty Buttons */
+    .diff-btn {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1.2rem 0.5rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    .diff-name {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.7);
+      transition: color 0.3s;
+    }
+
+    .diff-desc {
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Button Colors & Glows */
+    .diff-btn[data-diff="easy"]:hover, .diff-btn[data-diff="easy"].active {
+      border-color: var(--neon-cyan);
+      background: rgba(0, 240, 255, 0.05);
+      box-shadow: var(--box-glow-cyan);
+    }
+    .diff-btn[data-diff="easy"]:hover .diff-name, .diff-btn[data-diff="easy"].active .diff-name {
+      color: var(--neon-cyan);
+      text-shadow: var(--text-glow-cyan);
+    }
+
+    .diff-btn[data-diff="medium"]:hover, .diff-btn[data-diff="medium"].active {
+      border-color: var(--neon-purple);
+      background: rgba(157, 0, 255, 0.05);
+      box-shadow: 0 0 15px rgba(157, 0, 255, 0.3), inset 0 0 15px rgba(157, 0, 255, 0.15);
+    }
+    .diff-btn[data-diff="medium"]:hover .diff-name, .diff-btn[data-diff="medium"].active .diff-name {
+      color: var(--neon-purple);
+      text-shadow: 0 0 10px rgba(157, 0, 255, 0.6);
+    }
+
+    .diff-btn[data-diff="hard"]:hover, .diff-btn[data-diff="hard"].active {
+      border-color: var(--neon-magenta);
+      background: rgba(255, 0, 127, 0.05);
+      box-shadow: var(--box-glow-magenta);
+    }
+    .diff-btn[data-diff="hard"]:hover .diff-name, .diff-btn[data-diff="hard"].active .diff-name {
+      color: var(--neon-magenta);
+      text-shadow: var(--text-glow-magenta);
+    }
+
+    .diff-btn[data-diff="insane"]:hover, .diff-btn[data-diff="insane"].active {
+      border-color: var(--neon-red);
+      background: rgba(255, 51, 51, 0.05);
+      box-shadow: 0 0 15px rgba(255, 51, 51, 0.35), inset 0 0 15px rgba(255, 51, 51, 0.2);
+    }
+    .diff-btn[data-diff="insane"]:hover .diff-name, .diff-btn[data-diff="insane"].active .diff-name {
+      color: var(--neon-red);
+      text-shadow: 0 0 10px rgba(255, 51, 51, 0.7);
+    }
+
+    /* Launch Game Button */
+    .btn-launch {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      padding: 1.1rem 3rem;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
+      color: #05050a;
+      box-shadow: 0 0 25px rgba(157, 0, 255, 0.5);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      margin-top: 1rem;
+    }
+    .btn-launch:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 0 35px rgba(157, 0, 255, 0.7), 0 0 15px rgba(0, 240, 255, 0.3);
+    }
+    .btn-launch:active {
+      transform: translateY(1px);
+    }
+
+    /* Game Panel */
+    .game-panel {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      width: 100%;
+    }
+
+    /* Scoreboard */
+    .scoreboard {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 800px;
+      padding: 0 1rem;
+    }
+
+    .score-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .score-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+    .score-val {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 3.2rem;
+      font-weight: 900;
+    }
+    .p1-score { color: var(--neon-cyan); text-shadow: var(--text-glow-cyan); }
+    .p2-score { color: var(--neon-magenta); text-shadow: var(--text-glow-magenta); }
+
+    .vs-text {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.15);
+      font-size: 1.1rem;
+      letter-spacing: 4px;
+    }
+
+    /* Canvas Frame */
+    .canvas-wrapper {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #020205;
+      box-shadow: 0 0 35px rgba(157, 0, 255, 0.25);
+      border: 2px solid rgba(157, 0, 255, 0.25);
+      width: 100%;
+      max-width: 800px;
+      aspect-ratio: 8 / 5;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Game Controls Footer */
+    .controls-footer {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 800px;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.4);
+      padding: 0 0.5rem;
+    }
+    .controls-footer span {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .key-cap {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      font-family: monospace;
+      color: #fff;
+    }
+    .btn-quit {
+      color: var(--neon-magenta);
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .btn-quit:hover {
+      opacity: 0.8;
+    }
+
+    /* Overlays */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(4, 4, 8, 0.92);
+      backdrop-filter: blur(10px);
+      border-radius: 24px;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .overlay-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.8rem;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .overlay-desc {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 1rem;
+      text-align: center;
+      max-width: 440px;
+      line-height: 1.6;
+    }
+
+    .btn-return {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 1px;
+      padding: 0.9rem 2.2rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: rgba(0, 240, 255, 0.1);
+      border: 1px solid var(--neon-cyan);
+      color: var(--neon-cyan);
+      box-shadow: var(--box-glow-cyan);
+      transition: all 0.3s;
+    }
+    .btn-return:hover {
+      background: var(--neon-cyan);
+      color: #05050a;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Scanlines & Blobs -->
+  <div class="scanlines"></div>
+  <div class="blob blob-cyan"></div>
+  <div class="blob blob-magenta"></div>
+
+  <header>
+    <h1>NEON PONG</h1>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      
+      <!-- START MENU -->
+      <div id="start-menu" class="menu-panel">
+        <p class="subtitle">Enter the neon arena. Play against an adaptive AI built to challenge your reflexes and test your skills.</p>
+        
+        <!-- Difficulty Section -->
+        <section class="difficulty-section">
+          <label class="section-label">Select AI System Tier</label>
+          <div class="difficulty-grid">
+            
+            <button class="diff-btn active" data-diff="easy" onclick="selectDifficulty('easy')">
+              <span class="diff-name">EASY</span>
+              <span class="diff-desc">Tier 1</span>
+            </button>
+            
+            <button class="diff-btn" data-diff="medium" onclick="selectDifficulty('medium')">
+              <span class="diff-name">MEDIUM</span>
+              <span class="diff-desc">Tier 2</span>
+            </button>
+            
+            <button class="diff-btn" data-diff="hard" onclick="selectDifficulty('hard')">
+              <span class="diff-name">HARD</span>
+              <span class="diff-desc">Tier 3</span>
+            </button>
+            
+            <button class="diff-btn" data-diff="insane" onclick="selectDifficulty('insane')">
+              <span class="diff-name">INSANE</span>
+              <span class="diff-desc">Tier Max</span>
+            </button>
+            
+          </div>
+        </section>
+
+        <button class="btn-launch" onclick="startGame()">
+          LAUNCH GAME
+        </button>
+      </div>
+
+      <!-- GAME SCREEN PANEL -->
+      <div id="game-panel" class="game-panel">
+        
+        <!-- Scoreboard -->
+        <div class="scoreboard">
+          <div class="score-container">
+            <span class="score-label">PLAYER (CYAN)</span>
+            <span class="score-val p1-score" id="p1-score-val">0</span>
+          </div>
+          <div class="vs-text" id="vs-text">AI SYSTEM: EASY</div>
+          <div class="score-container">
+            <span class="score-label">COMPUTER (MAGENTA)</span>
+            <span class="score-val p2-score" id="p2-score-val">0</span>
+          </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="canvas-wrapper">
+          <canvas id="game-canvas" width="800" height="500"></canvas>
+        </div>
+
+        <!-- Footer Instructions -->
+        <div class="controls-footer">
+          <span>Move Paddle: <span class="key-cap">W</span> / <span class="key-cap">S</span> or <span class="key-cap">▲</span> / <span class="key-cap">▼</span></span>
+          <span class="btn-quit" onclick="resetToMenu()">QUIT MISSION</span>
+        </div>
+
+      </div>
+
+      <!-- OVERLAYS (Game Over) -->
+      <div id="game-overlay" class="overlay">
+        <h2 id="overlay-title" class="overlay-title">GAME OVER</h2>
+        <p id="overlay-desc" class="overlay-desc"></p>
+        <button class="btn-return" onclick="resetToMenu()">MAIN MENU</button>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    // --- AUDIO SYNTHESIS SYSTEM ---
+    const AudioEngine = {
+      ctx: null,
+      
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      },
+      
+      playTone(freq, type, duration, endFreq = null) {
+        this.init();
+        if (!this.ctx) return;
+        
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (endFreq) {
+          osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + duration);
+        }
+        
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+      },
+      
+      paddleHit() {
+        this.playTone(360, 'sine', 0.08, 540);
+      },
+      
+      wallBounce() {
+        this.playTone(190, 'triangle', 0.1, 140);
+      },
+      
+      scoreSound() {
+        this.playTone(480, 'square', 0.22, 750);
+      },
+      
+      victorySound() {
+        this.playTone(440, 'sine', 0.12);
+        setTimeout(() => this.playTone(554.37, 'sine', 0.12), 120);
+        setTimeout(() => this.playTone(659.25, 'sine', 0.12), 240);
+        setTimeout(() => this.playTone(880, 'sine', 0.45), 360);
+      },
+      
+      defeatSound() {
+        this.playTone(200, 'sawtooth', 0.3, 90);
+      }
+    };
+
+    // --- GAME ENGINE STATE & CONFIG ---
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const CONFIG = {
+      canvasWidth: 800,
+      canvasHeight: 500,
+      paddleWidth: 12,
+      paddleHeight: 80,
+      paddleSpeed: 7.5,
+      ballRadius: 8,
+      initialBallSpeed: 5.5,
+      maxBallSpeed: 14.5,
+      winningScore: 7
+    };
+
+    const state = {
+      difficulty: 'easy',
+      p1: { y: 210, score: 0 },
+      p2: { y: 210, score: 0 },
+      ball: { x: 400, y: 250, vx: 0, vy: 0 },
+      particles: [],
+      ballTrail: [],
+      keys: {
+        W: false,
+        S: false,
+        ArrowUp: false,
+        ArrowDown: false
+      },
+      active: false,
+      flashIntensity: 0,
+      flashColor: '#00f0ff',
+      aiUpdateCounter: 0,
+      aiTargetY: 210
+    };
+
+    // DIFFICULTY CONFIGS
+    const DIFFICULTY_PROPERTIES = {
+      easy: {
+        speedLimit: 3.5,
+        reactionInterval: 14, // Updates target position every 14 frames
+        errorMargin: 35      // High tracking offset
+      },
+      medium: {
+        speedLimit: 4.8,
+        reactionInterval: 8,  // Updates target position every 8 frames
+        errorMargin: 18      // Moderate offset
+      },
+      hard: {
+        speedLimit: 6.8,
+        reactionInterval: 3,  // Updates target position every 3 frames
+        errorMargin: 5       // Snappy offset
+      },
+      insane: {
+        speedLimit: 9.5,
+        reactionInterval: 1,  // Runs real-time every frame
+        errorMargin: 0       // Absolute accuracy
+      }
+    };
+
+    // Sparkle Particle Class
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() * 2 - 1) * (Math.random() * 5 + 3);
+        this.vy = (Math.random() * 2 - 1) * (Math.random() * 5 + 3);
+        this.color = color;
+        this.alpha = 1.0;
+        this.decay = Math.random() * 0.035 + 0.025;
+        this.size = Math.random() * 4 + 1.5;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= this.decay;
+      }
+      draw(c) {
+        c.save();
+        c.globalAlpha = this.alpha;
+        c.fillStyle = this.color;
+        c.shadowBlur = 10;
+        c.shadowColor = this.color;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    // --- SELECTION LOGIC ---
+    function selectDifficulty(diff) {
+      document.querySelectorAll('.diff-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelector(`.diff-btn[data-diff="${diff}"]`).classList.add('active');
+      state.difficulty = diff;
+    }
+
+    // --- GAME LIFECYCLE ---
+    function startGame() {
+      AudioEngine.init();
+      
+      // Update UI panels
+      document.getElementById('start-menu').style.display = 'none';
+      document.getElementById('game-panel').style.display = 'flex';
+      document.getElementById('vs-text').innerText = `AI SYSTEM: ${state.difficulty.toUpperCase()}`;
+      
+      // Setup game values
+      state.p1.score = 0;
+      state.p2.score = 0;
+      state.p1.y = CONFIG.canvasHeight / 2 - CONFIG.paddleHeight / 2;
+      state.p2.y = CONFIG.canvasHeight / 2 - CONFIG.paddleHeight / 2;
+      state.aiTargetY = state.p2.y;
+      state.particles = [];
+      state.ballTrail = [];
+      state.flashIntensity = 0;
+      
+      serveBall(Math.random() > 0.5 ? 1 : -1);
+      
+      state.active = true;
+      requestAnimationFrame(gameLoop);
+    }
+
+    function resetToMenu() {
+      state.active = false;
+      document.getElementById('start-menu').style.display = 'flex';
+      document.getElementById('game-panel').style.display = 'none';
+      document.getElementById('game-overlay').classList.remove('active');
+    }
+
+    // --- CONTROLS LISTENERS ---
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'w' || e.key === 'W') state.keys.W = true;
+      if (e.key === 's' || e.key === 'S') state.keys.S = true;
+      if (e.key === 'ArrowUp') {
+        state.keys.ArrowUp = true;
+        e.preventDefault();
+      }
+      if (e.key === 'ArrowDown') {
+        state.keys.ArrowDown = true;
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'w' || e.key === 'W') state.keys.W = false;
+      if (e.key === 's' || e.key === 'S') state.keys.S = false;
+      if (e.key === 'ArrowUp') state.keys.ArrowUp = false;
+      if (e.key === 'ArrowDown') state.keys.ArrowDown = false;
+    });
+
+    // Touch dragging controls on the left side of canvas
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const touchY = e.touches[0].clientY - rect.top;
+      // Map to logical coordinates
+      const logicalY = (touchY / rect.height) * CONFIG.canvasHeight;
+      state.p1.y = Math.max(0, Math.min(CONFIG.canvasHeight - CONFIG.paddleHeight, logicalY - CONFIG.paddleHeight / 2));
+    }, { passive: false });
+
+    // --- GAME ENGINE PHYSICS & GRAPHICS ---
+
+    function serveBall(direction) {
+      state.ball.x = CONFIG.canvasWidth / 2;
+      state.ball.y = CONFIG.canvasHeight / 2;
+      state.ball.vx = direction * CONFIG.initialBallSpeed;
+      state.ball.vy = (Math.random() * 2 - 1) * 3;
+      state.ballTrail = [];
+    }
+
+    // Spawn sparkles at collision or goals
+    function triggerHitSparkles(x, y, color) {
+      for (let i = 0; i < 20; i++) {
+        state.particles.push(new Particle(x, y, color));
+      }
+    }
+
+    function triggerGoalFlash(color) {
+      state.flashIntensity = 0.55;
+      state.flashColor = color;
+      
+      // Floating score celebration particles
+      const isPlayerScore = color === '#00f0ff';
+      const emitX = isPlayerScore ? CONFIG.canvasWidth - 15 : 15;
+      for (let i = 0; i < 35; i++) {
+        const p = new Particle(emitX, Math.random() * CONFIG.canvasHeight, color);
+        p.vx = isPlayerScore ? -(Math.random() * 5 + 1) : (Math.random() * 5 + 1);
+        p.vy = (Math.random() * 2 - 1) * 2;
+        p.size = Math.random() * 4.5 + 2.5;
+        p.decay = 0.015;
+        state.particles.push(p);
+      }
+    }
+
+    function updateAI() {
+      const aiProps = DIFFICULTY_PROPERTIES[state.difficulty];
+      state.aiUpdateCounter++;
+
+      // React to the ball path based on the reaction interval ticks
+      if (state.aiUpdateCounter >= aiProps.reactionInterval) {
+        state.aiUpdateCounter = 0;
+        
+        // Add difficulty margins of error
+        const error = (Math.random() * 2 - 1) * aiProps.errorMargin;
+        state.aiTargetY = state.ball.y - CONFIG.paddleHeight / 2 + error;
+      }
+
+      // Move AI paddle toward target
+      const diff = state.aiTargetY - state.p2.y;
+      if (Math.abs(diff) > 2) {
+        state.p2.y += Math.sign(diff) * Math.min(Math.abs(diff), aiProps.speedLimit);
+      }
+
+      // Keep inside bounds
+      state.p2.y = Math.max(0, Math.min(CONFIG.canvasHeight - CONFIG.paddleHeight, state.p2.y));
+    }
+
+    function updatePhysics() {
+      // 1. Local Player Paddle Movement
+      if (state.keys.W || state.keys.ArrowUp) {
+        state.p1.y -= CONFIG.paddleSpeed;
+      }
+      if (state.keys.S || state.keys.ArrowDown) {
+        state.p1.y += CONFIG.paddleSpeed;
+      }
+      state.p1.y = Math.max(0, Math.min(CONFIG.canvasHeight - CONFIG.paddleHeight, state.p1.y));
+
+      // 2. AI Computations
+      updateAI();
+
+      // 3. Move Ball
+      state.ball.x += state.ball.vx;
+      state.ball.y += state.ball.vy;
+
+      // 4. Boundary Bounces (Top & Bottom)
+      if (state.ball.y - CONFIG.ballRadius <= 0) {
+        state.ball.y = CONFIG.ballRadius;
+        state.ball.vy = -state.ball.vy;
+        AudioEngine.wallBounce();
+      } else if (state.ball.y + CONFIG.ballRadius >= CONFIG.canvasHeight) {
+        state.ball.y = CONFIG.canvasHeight - CONFIG.ballRadius;
+        state.ball.vy = -state.ball.vy;
+        AudioEngine.wallBounce();
+      }
+
+      // 5. Collision with Player Paddle (Left - Cyan)
+      if (state.ball.vx < 0 &&
+          state.ball.x - CONFIG.ballRadius <= 20 + CONFIG.paddleWidth &&
+          state.ball.x - CONFIG.ballRadius >= 20 &&
+          state.ball.y >= state.p1.y &&
+          state.ball.y <= state.p1.y + CONFIG.paddleHeight) {
+        
+        state.ball.x = 20 + CONFIG.paddleWidth + CONFIG.ballRadius;
+        state.ball.vx = -state.ball.vx;
+        
+        // Spin dynamics math
+        const relativeY = state.ball.y - (state.p1.y + CONFIG.paddleHeight / 2);
+        const normalizedY = relativeY / (CONFIG.paddleHeight / 2);
+        state.ball.vy = normalizedY * 5.5;
+
+        // Velocity speed multiplier
+        state.ball.vx = Math.min(state.ball.vx * 1.07, CONFIG.maxBallSpeed);
+        
+        AudioEngine.paddleHit();
+        triggerHitSparkles(20 + CONFIG.paddleWidth, state.ball.y, '#00f0ff');
+      }
+
+      // 6. Collision with AI Paddle (Right - Magenta)
+      const p2X = CONFIG.canvasWidth - 20 - CONFIG.paddleWidth;
+      if (state.ball.vx > 0 &&
+          state.ball.x + CONFIG.ballRadius >= p2X &&
+          state.ball.x + CONFIG.ballRadius <= CONFIG.canvasWidth - 20 &&
+          state.ball.y >= state.p2.y &&
+          state.ball.y <= state.p2.y + CONFIG.paddleHeight) {
+        
+        state.ball.x = p2X - CONFIG.ballRadius;
+        state.ball.vx = -state.ball.vx;
+
+        // Spin dynamics math
+        const relativeY = state.ball.y - (state.p2.y + CONFIG.paddleHeight / 2);
+        const normalizedY = relativeY / (CONFIG.paddleHeight / 2);
+        state.ball.vy = normalizedY * 5.5;
+
+        // Velocity speed multiplier
+        state.ball.vx = Math.max(state.ball.vx * 1.07, -CONFIG.maxBallSpeed);
+        
+        AudioEngine.paddleHit();
+        triggerHitSparkles(p2X, state.ball.y, '#ff007f');
+      }
+
+      // 7. Goals / Out of bounds
+      if (state.ball.x - CONFIG.ballRadius < 0) {
+        // AI Scores
+        state.p2.score++;
+        AudioEngine.scoreSound();
+        triggerGoalFlash('#ff007f');
+        
+        if (state.p2.score >= CONFIG.winningScore) {
+          endGame('computer');
+        } else {
+          serveBall(1); // Serve to player
+        }
+      } else if (state.ball.x + CONFIG.ballRadius > CONFIG.canvasWidth) {
+        // Player Scores
+        state.p1.score++;
+        AudioEngine.scoreSound();
+        triggerGoalFlash('#00f0ff');
+        
+        if (state.p1.score >= CONFIG.winningScore) {
+          endGame('player');
+        } else {
+          serveBall(-1); // Serve to AI
+        }
+      }
+    }
+
+    function draw() {
+      // Clear canvas with trace transparency to create neon motion trail overlays
+      ctx.fillStyle = 'rgba(2, 2, 5, 0.32)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Mid-field dotted boundary line
+      ctx.strokeStyle = 'rgba(157, 0, 255, 0.12)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([12, 18]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset line dash
+
+      // Player Paddle (Left - Cyan)
+      ctx.save();
+      ctx.fillStyle = '#00f0ff';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#00f0ff';
+      ctx.fillRect(20, state.p1.y, CONFIG.paddleWidth, CONFIG.paddleHeight);
+      ctx.restore();
+
+      // AI Paddle (Right - Magenta)
+      ctx.save();
+      ctx.fillStyle = '#ff007f';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#ff007f';
+      ctx.fillRect(canvas.width - 20 - CONFIG.paddleWidth, state.p2.y, CONFIG.paddleWidth, CONFIG.paddleHeight);
+      ctx.restore();
+
+      // Ball Motion Trail update & draw
+      if (state.active) {
+        state.ballTrail.push({ x: state.ball.x, y: state.ball.y });
+        if (state.ballTrail.length > 10) {
+          state.ballTrail.shift();
+        }
+      }
+
+      for (let i = 0; i < state.ballTrail.length; i++) {
+        const trail = state.ballTrail[i];
+        const alpha = ((i + 1) / state.ballTrail.length) * 0.28;
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(trail.x, trail.y, CONFIG.ballRadius * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Ball Core
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(state.ball.x, state.ball.y, CONFIG.ballRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Draw active particles
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.update();
+        if (p.alpha <= 0) {
+          state.particles.splice(i, 1);
+        } else {
+          p.draw(ctx);
+        }
+      }
+
+      // Goal Flash screen border overlay
+      if (state.flashIntensity > 0) {
+        ctx.save();
+        ctx.strokeStyle = state.flashColor;
+        ctx.lineWidth = 14 * state.flashIntensity;
+        ctx.globalAlpha = state.flashIntensity;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        
+        state.flashIntensity -= 0.025; // fade flash speed
+      }
+    }
+
+    function gameLoop() {
+      if (!state.active) return;
+
+      updatePhysics();
+      draw();
+
+      // Update DOM values
+      document.getElementById('p1-score-val').innerText = state.p1.score;
+      document.getElementById('p2-score-val').innerText = state.p2.score;
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // --- GAME END ROUTINES ---
+    function endGame(winner) {
+      state.active = false;
+      
+      const overlay = document.getElementById('game-overlay');
+      const title = document.getElementById('overlay-title');
+      const desc = document.getElementById('overlay-desc');
+      
+      overlay.classList.add('active');
+      
+      if (winner === 'player') {
+        title.innerText = "VICTORY";
+        title.style.color = '#00f0ff';
+        title.style.textShadow = '0 0 15px rgba(0,240,255,0.7)';
+        desc.innerText = `You defeated the AI on ${state.difficulty.toUpperCase()} tier! The grid has been reclaimed.`;
+        AudioEngine.victorySound();
+      } else {
+        title.innerText = "SYSTEM DEFEAT";
+        title.style.color = '#ff007f';
+        title.style.textShadow = '0 0 15px rgba(255,0,127,0.7)';
+        desc.innerText = `The computer overcame your systems on ${state.difficulty.toUpperCase()} tier. Reset and try again.`;
+        AudioEngine.defeatSound();
+      }
+    }
+  </script>
+</body>
+</html>
